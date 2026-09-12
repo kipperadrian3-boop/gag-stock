@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grow a Garden - Live Stock Tracker & Notifier</title>
+  <link rel="icon" href="https://growagarden.gg/favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="background-glow glow-1"></div>
+  <div class="background-glow glow-2"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo-area">
+          <span class="logo-emoji">🌱</span>
+          <div>
+            <h1 class="title">Grow a Garden <span class="gradient-text">Stock</span></h1>
+            <p class="subtitle">Live Seed, Gear & Cosmetic Shop Tracker mit Desktop-Benachrichtigung</p>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button id="test-notification-btn" class="btn btn-secondary" title="Testet die Windows-Benachrichtigung">
+            <span class="icon">🔔</span> Test Alert
+          </button>
+          <button id="mute-all-btn" class="btn btn-danger-outline" title="Alle Benachrichtigungen deaktivieren">
+            <span class="icon">🔕</span> Alle stummschalten
+          </button>
+          <div class="live-indicator">
+            <span class="pulse-dot"></span>
+            <span id="api-status-text">Live verbunden</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Restock Countdown Timers -->
+      <div class="timers-grid">
+        <div class="timer-card" data-category="seeds">
+          <div class="timer-header">
+            <span class="timer-icon">🌾</span>
+            <span class="timer-label">Seeds Restock</span>
+          </div>
+          <div class="timer-value" id="timer-seeds">--:--</div>
+          <div class="timer-bar"><div class="timer-progress" id="progress-seeds"></div></div>
+        </div>
+
+        <div class="timer-card" data-category="gears">
+          <div class="timer-header">
+            <span class="timer-icon">⚙️</span>
+            <span class="timer-label">Gear Restock</span>
+          </div>
+          <div class="timer-value" id="timer-gears">--:--</div>
+          <div class="timer-bar"><div class="timer-progress" id="progress-gears"></div></div>
+        </div>
+
+        <div class="timer-card" data-category="cosmetics">
+          <div class="timer-header">
+            <span class="timer-icon">✨</span>
+            <span class="timer-label">Cosmetics Restock</span>
+          </div>
+          <div class="timer-value" id="timer-cosmetics">--:--</div>
+          <div class="timer-bar"><div class="timer-progress" id="progress-cosmetics"></div></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Controls & Filter Section -->
+    <section class="controls-section">
+      <div class="tabs-group" role="tablist">
+        <button class="tab-btn active" data-tab="seeds" role="tab" aria-selected="true">
+          🌱 Seeds <span class="tab-count" id="count-badge-seeds">0</span>
+        </button>
+        <button class="tab-btn" data-tab="gear" role="tab" aria-selected="false">
+          ⚙️ Gear <span class="tab-count" id="count-badge-gear">0</span>
+        </button>
+        <button class="tab-btn" data-tab="cosmetics" role="tab" aria-selected="false">
+          ✨ Cosmetics <span class="tab-count" id="count-badge-cosmetics">0</span>
+        </button>
+      </div>
+
+      <div class="filter-group">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Nach Name suchen (z.B. Carrot, Watering Can)..." autocomplete="off">
+          <button id="search-clear" class="search-clear hidden">&times;</button>
+        </div>
+
+        <div class="filter-dropdown-wrapper">
+          <select id="stock-filter" class="filter-select">
+            <option value="all">Alle anzeigen</option>
+            <option value="instock">Nur im Stock</option>
+            <option value="notif_active">Nur Benachrichtigung an (🟢)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Category Info Banner -->
+    <div class="category-info-banner" id="category-info-banner">
+      <span class="info-icon">💡</span>
+      <span id="category-info-text">Seeds: Zeigt alle Samen an. Klicke auf die Glocke (🟢), um bei Stock sofort benachrichtigt zu werden!</span>
+    </div>
+
+    <!-- Main Items Grid -->
+    <main class="items-container">
+      <div id="loading-spinner" class="loading-state">
+        <div class="spinner"></div>
+        <p>Lade aktuellen Grow a Garden Stock...</p>
+      </div>
+
+      <div id="items-grid" class="items-grid"></div>
+
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-icon">🍃</div>
+        <h3>Keine Gegenstände gefunden</h3>
+        <p>Probiere einen anderen Suchbegriff oder passe den Filter an.</p>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-left">
+        <span>Grow a Garden Roblox Live Tracker</span>
+        <span class="separator">•</span>
+        <span id="last-updated-text">Zuletzt aktualisiert: Nie</span>
+      </div>
+      <div class="footer-right">
+        <span>Daten von <a href="https://growagarden.gg" target="_blank" rel="noopener">growagarden.gg</a></span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast Notification Container for Web Feedback -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/items_catalog.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/notifier.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
