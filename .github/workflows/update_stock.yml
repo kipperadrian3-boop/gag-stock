@@ -1,0 +1,29 @@
+name: Auto Update Stock Data
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  update-stock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Fetch Live Stock Data
+        run: |
+          mkdir -p data js
+          curl -s -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://growagarden.gg/api/stock" -o data/stock.json || true
+          if [ -s data/stock.json ]; then
+            echo "window.GAG_LIVE_STOCK = $(cat data/stock.json);" > js/live_stock_data.js
+          fi
+
+      - name: Commit and Push Updates
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/stock.json js/live_stock_data.js
+          git commit -m "chore: auto-update stock data from live shop" || exit 0
+          git push
