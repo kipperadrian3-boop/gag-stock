@@ -1,6 +1,6 @@
 /**
  * Grow a Garden (GAG) - Main Application Controller
- * Verbindet API, Master Catalog, UI Rendering, Timers und Notifier.
+ * Verbindet API, offiziellen Ingame-Katalog, UI Rendering, Timers und Notifier.
  */
 
 // Toast Feedback Helper
@@ -18,7 +18,7 @@ window.showToast = function(message, type = "default") {
     toast.style.transform = "translateY(10px)";
     toast.style.transition = "all 0.3s ease";
     setTimeout(() => toast.remove(), 300);
-  }, 3500);
+  }, 4000);
 };
 
 class AppController {
@@ -34,7 +34,7 @@ class AppController {
       gear: {},
       cosmetics: {}
     };
-    this.imagesMap = {};
+    this.imagesMap = { ...VERIFIED_ITEM_IMAGES };
     
     // Restock Timers (in ms)
     this.timerEnds = {
@@ -129,20 +129,14 @@ class AppController {
       const itemName = btn.dataset.item;
       if (!itemName) return;
 
+      const currentAmount = (this.stockMap[this.currentTab] && this.stockMap[this.currentTab][itemName]) || 0;
+      const imgUrl = this.getItemImage(itemName);
+
       btn.classList.add("pulse-bell");
       setTimeout(() => btn.classList.remove("pulse-bell"), 600);
 
-      const isActive = await window.notifierManager.toggleAlert(itemName);
+      const isActive = await window.notifierManager.toggleAlert(itemName, currentAmount, imgUrl);
       this.updateCardNotifState(btn, isActive);
-
-      // Falls das Item bereits im Stock ist und gerade auf Grün geschaltet wurde, direkt melden!
-      if (isActive) {
-        const currentAmount = this.stockMap[this.currentTab][itemName] || 0;
-        if (currentAmount > 0) {
-          const imgUrl = this.imagesMap[itemName] || null;
-          window.notifierManager.sendNotification(itemName, currentAmount, imgUrl);
-        }
-      }
     });
   }
 
@@ -161,11 +155,10 @@ class AppController {
       btn.setAttribute("aria-selected", active ? "true" : "false");
     });
 
-    // Info-Banner anpassen
     if (tab === "seeds") {
-      this.categoryInfoText.textContent = "Seeds: Zeigt alle Samen an (auch ausverkaufte). Klicke auf 🔴, um sie auf 🟢 grün zu schalten und Desktop-Alerts zu erhalten!";
+      this.categoryInfoText.textContent = "Seeds: Zeigt alle Samen in offizieller Ingame-Reihenfolge an. Klicke auf 🔴, um Benachrichtigungen für dieses Item scharf zu stellen!";
     } else if (tab === "gear") {
-      this.categoryInfoText.textContent = "Gear: Zeigt alle Werkzeuge/Ausrüstung an (auch ausverkaufte). Schalte Gegenstände auf 🟢 grün für Benachrichtigungen!";
+      this.categoryInfoText.textContent = "Gear: Zeigt alle Werkzeuge in offizieller Ingame-Reihenfolge an (Guaranteed Tools zuerst).";
     } else if (tab === "cosmetics") {
       this.categoryInfoText.textContent = "Cosmetics: Zeigt ausschließlich Deko-Gegenstände an, die aktuell im Stock sind.";
     }
@@ -184,7 +177,7 @@ class AppController {
   }
 
   async fetchStock(isBackground = false) {
-    if (!isBackground) {
+    if (!isBackground && !this.apiData) {
       this.loadingSpinner.classList.remove("hidden");
     }
 
@@ -195,7 +188,7 @@ class AppController {
       this.apiStatusText.textContent = "Live verbunden";
       this.lastUpdatedText.textContent = `Zuletzt aktualisiert: ${new Date().toLocaleTimeString()}`;
 
-      // Benachrichtigungen für alle aktiven Items prüfen
+      // Benachrichtigungen prüfen
       const allStockItems = {
         ...this.stockMap.seeds,
         ...this.stockMap.gear
@@ -206,7 +199,7 @@ class AppController {
       this.render();
     } catch (err) {
       console.error("Fehler beim Abrufen der Stock-Daten:", err);
-      this.apiStatusText.textContent = "Offline / Proxy Retry";
+      this.apiStatusText.textContent = "Verbindungsfehler";
       if (!isBackground) {
         this.loadingSpinner.classList.add("hidden");
         window.showToast("Konnte Stock-Daten nicht live laden. Versuche erneut...", "danger");
@@ -215,17 +208,15 @@ class AppController {
   }
 
   processData(data) {
-    // 1. Stock-Maps zurücksetzen
     this.stockMap.seeds = {};
     this.stockMap.gear = {};
     this.stockMap.cosmetics = {};
 
-    // 2. Bilder sammeln
     if (data.imageData) {
-      this.imagesMap = { ...this.imagesMap, ...data.imageData };
+      this.imagesMap = { ...VERIFIED_ITEM_IMAGES, ...data.imageData };
     }
 
-    // 3. Seeds verarbeiten
+    // Seeds
     if (Array.isArray(data.seedsStock)) {
       data.seedsStock.forEach(item => {
         if (item && item.name) {
@@ -234,7 +225,7 @@ class AppController {
       });
     }
 
-    // 4. Gear verarbeiten
+    // Gear
     if (Array.isArray(data.gearStock)) {
       data.gearStock.forEach(item => {
         if (item && item.name) {
@@ -243,7 +234,7 @@ class AppController {
       });
     }
 
-    // 5. Cosmetics verarbeiten (nur die tatsächlich im Stock sind)
+    // Cosmetics (nur im Stock)
     if (Array.isArray(data.cosmeticsStock)) {
       data.cosmeticsStock.forEach(item => {
         if (item && item.name && Number(item.value) > 0) {
@@ -252,7 +243,7 @@ class AppController {
       });
     }
 
-    // 6. Restock-Timers erfassen
+    // Restock Timers
     const now = Date.now();
     if (data.restockTimers) {
       if (data.restockTimers.seeds) {
@@ -267,21 +258,41 @@ class AppController {
     }
   }
 
+  getItemImage(name) {
+    return VERIFIED_ITEM_IMAGES[name] || this.imagesMap[name] || null;
+  }
+
+  /**
+   * Sortierung strikt in der offiziellen Ingame-Reihenfolge:
+   * 1. Vorrätige Items (in-stock) ganz oben in ihrer Ingame-Reihenfolge!
+   * 2. Nicht vorrätige Items (out-of-stock) darunter, ebenfalls in Ingame-Reihenfolge!
+   */
   getItemsForCurrentTab() {
     let items = [];
 
     if (this.currentTab === "seeds") {
-      // VORGABE: ALLE Seeds anzeigen (auch wenn nicht im Stock = 0)
-      const allSeedNames = Array.from(new Set([...MASTER_SEEDS, ...Object.keys(this.stockMap.seeds)]));
-      allSeedNames.sort((a, b) => {
+      // Offizielle Liste der Samen
+      const allNames = Array.from(new Set([...OFFICIAL_SEEDS_ORDER, ...Object.keys(this.stockMap.seeds)]));
+      
+      allNames.sort((a, b) => {
         const stockA = this.stockMap.seeds[a] || 0;
         const stockB = this.stockMap.seeds[b] || 0;
-        if (stockA > 0 && stockB === 0) return -1;
-        if (stockB > 0 && stockA === 0) return 1;
-        return a.localeCompare(b);
+        const hasStockA = stockA > 0;
+        const hasStockB = stockB > 0;
+
+        // Vorrätige zuerst
+        if (hasStockA && !hasStockB) return -1;
+        if (!hasStockA && hasStockB) return 1;
+
+        // Ingame-Reihenfolge
+        const idxA = OFFICIAL_SEEDS_ORDER.indexOf(a);
+        const idxB = OFFICIAL_SEEDS_ORDER.indexOf(b);
+        const posA = idxA === -1 ? 999 : idxA;
+        const posB = idxB === -1 ? 999 : idxB;
+        return posA - posB;
       });
 
-      items = allSeedNames.map(name => ({
+      items = allNames.map(name => ({
         name: name,
         amount: this.stockMap.seeds[name] || 0,
         category: "seeds",
@@ -289,17 +300,28 @@ class AppController {
       }));
 
     } else if (this.currentTab === "gear") {
-      // VORGABE: ALLE Gear anzeigen (auch wenn nicht im Stock = 0)
-      const allGearNames = Array.from(new Set([...MASTER_GEARS, ...Object.keys(this.stockMap.gear)]));
-      allGearNames.sort((a, b) => {
+      // Offizielle Liste der Werkzeuge
+      const allNames = Array.from(new Set([...OFFICIAL_GEARS_ORDER, ...Object.keys(this.stockMap.gear)]));
+
+      allNames.sort((a, b) => {
         const stockA = this.stockMap.gear[a] || 0;
         const stockB = this.stockMap.gear[b] || 0;
-        if (stockA > 0 && stockB === 0) return -1;
-        if (stockB > 0 && stockA === 0) return 1;
-        return a.localeCompare(b);
+        const hasStockA = stockA > 0;
+        const hasStockB = stockB > 0;
+
+        // Vorrätige zuerst
+        if (hasStockA && !hasStockB) return -1;
+        if (!hasStockA && hasStockB) return 1;
+
+        // Ingame-Reihenfolge
+        const idxA = OFFICIAL_GEARS_ORDER.indexOf(a);
+        const idxB = OFFICIAL_GEARS_ORDER.indexOf(b);
+        const posA = idxA === -1 ? 999 : idxA;
+        const posB = idxB === -1 ? 999 : idxB;
+        return posA - posB;
       });
 
-      items = allGearNames.map(name => ({
+      items = allNames.map(name => ({
         name: name,
         amount: this.stockMap.gear[name] || 0,
         category: "gear",
@@ -307,14 +329,14 @@ class AppController {
       }));
 
     } else if (this.currentTab === "cosmetics") {
-      // VORGABE: Bei Cosmetic NUR die im Stock! Keine Notification!
+      // Nur Items im Stock!
       items = Object.entries(this.stockMap.cosmetics).map(([name, amount]) => ({
         name: name,
         amount: amount,
         category: "cosmetics",
-        hasNotif: false // Keine Glocke bei Cosmetics!
+        hasNotif: false
       }));
-      items.sort((a, b) => a.name.localeCompare(b.name));
+      items.sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
     }
 
     return items;
@@ -326,11 +348,11 @@ class AppController {
     // Tab Badges aktualisieren
     if (this.countBadgeSeeds) {
       const inStockSeeds = Object.values(this.stockMap.seeds).filter(v => v > 0).length;
-      this.countBadgeSeeds.textContent = `${inStockSeeds}/${MASTER_SEEDS.length}`;
+      this.countBadgeSeeds.textContent = `${inStockSeeds}/${OFFICIAL_SEEDS_ORDER.length}`;
     }
     if (this.countBadgeGear) {
       const inStockGear = Object.values(this.stockMap.gear).filter(v => v > 0).length;
-      this.countBadgeGear.textContent = `${inStockGear}/${MASTER_GEARS.length}`;
+      this.countBadgeGear.textContent = `${inStockGear}/${OFFICIAL_GEARS_ORDER.length}`;
     }
     if (this.countBadgeCosmetics) {
       this.countBadgeCosmetics.textContent = Object.keys(this.stockMap.cosmetics).length;
@@ -338,12 +360,9 @@ class AppController {
 
     // Filter anwenden
     const filteredItems = rawItems.filter(item => {
-      // Suchbegriff
       if (this.searchQuery && !item.name.toLowerCase().includes(this.searchQuery)) {
         return false;
       }
-
-      // Filter-Modus
       if (this.filterMode === "instock" && item.amount <= 0) {
         return false;
       }
@@ -352,7 +371,6 @@ class AppController {
           return false;
         }
       }
-
       return true;
     });
 
@@ -373,7 +391,7 @@ class AppController {
       const inStock = item.amount > 0;
       card.className = `item-card ${inStock ? "is-in-stock" : "is-out-of-stock"}`;
 
-      const imgUrl = this.imagesMap[item.name];
+      const imgUrl = this.getItemImage(item.name);
       const isAlertOn = item.hasNotif ? window.notifierManager.isAlertEnabled(item.name) : false;
 
       // Notification Button (NUR bei Seeds und Gear)
@@ -382,7 +400,7 @@ class AppController {
         notifBtnHtml = `
           <button class="notif-btn ${isAlertOn ? "is-active" : ""}" 
                   data-item="${this.escapeHtml(item.name)}" 
-                  title="${isAlertOn ? "Benachrichtigung aktiv (🟢 Grün) - Klicke zum Deaktivieren" : "Benachrichtigung inaktiv (🔴 Rot) - Klicke zum Aktivieren"}"
+                  title="${isAlertOn ? "Benachrichtigung aktiv (🟢 Grün) - Klicke zum Ausschalten" : "Benachrichtigung inaktiv (🔴 Rot) - Klicke zum Aktivieren"}"
                   aria-label="${isAlertOn ? "Benachrichtigung an (Grün)" : "Benachrichtigung aus (Rot)"}">
             ${isAlertOn ? "🟢" : "🔴"}
           </button>
@@ -439,12 +457,8 @@ class AppController {
 
   updateTimers() {
     const now = Date.now();
-
-    // Seeds
     this.renderSingleTimer(this.timerSeeds, this.progressSeeds, this.timerEnds.seeds, this.timerDurations.seeds, now);
-    // Gear
     this.renderSingleTimer(this.timerGears, this.progressGears, this.timerEnds.gears, this.timerDurations.gears, now);
-    // Cosmetics
     this.renderSingleTimer(this.timerCosmetics, this.progressCosmetics, this.timerEnds.cosmetics, this.timerDurations.cosmetics, now);
   }
 
@@ -455,7 +469,6 @@ class AppController {
     if (remainingMs <= 0) {
       textEl.textContent = "00:00";
       if (progressEl) progressEl.style.width = "100%";
-      // Bei 0 Restzeit sofort Daten neu anfragen
       if (remainingMs > -2000) {
         window.notifierManager.resetCycleCache();
         this.fetchStock(true);
@@ -486,7 +499,6 @@ class AppController {
   }
 }
 
-// App initialisieren
 document.addEventListener("DOMContentLoaded", () => {
   window.app = new AppController();
   window.app.start();
