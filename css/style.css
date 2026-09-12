@@ -653,24 +653,131 @@ body {
   display: none !important;
 }
 
-/* Toast Notifications (Web UI) */
+/* ==========================================================================
+   Windows 11 Desktop Style Notification Banner (1:1 Native Look)
+   ========================================================================== */
 .toast-container {
   position: fixed;
   bottom: 24px;
   right: 24px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  z-index: 9999;
+  gap: 12px;
+  z-index: 999999;
   pointer-events: none;
 }
 
+.win-desktop-alert {
+  pointer-events: auto;
+  width: 360px;
+  background: rgba(26, 32, 28, 0.92);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(16, 185, 129, 0.3);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #ffffff;
+  animation: winAlertSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.25s ease;
+  user-select: none;
+}
+
+@keyframes winAlertSlideIn {
+  from {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.win-alert-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.win-alert-app-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.win-alert-app-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.win-alert-app-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-green-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.win-alert-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.win-alert-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.win-alert-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.win-alert-item-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+}
+
+.win-alert-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.win-alert-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.win-alert-amount {
+  font-size: 0.88rem;
+  color: var(--accent-green-bright);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Generic Toast Fallback */
 .toast {
   background: rgba(18, 26, 22, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid var(--border-active);
   color: #ffffff;
-  padding: 14px 20px;
+  padding: 12px 18px;
   border-radius: var(--radius-md);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -727,4 +834,5 @@ body {
   .filter-select { width: 100%; }
   .items-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
   .item-card { padding: 14px; }
+  .win-desktop-alert { width: calc(100vw - 40px); right: 20px; }
 }
